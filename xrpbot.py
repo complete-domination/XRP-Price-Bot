@@ -11,7 +11,6 @@ import discord
 TOKEN = os.environ.get("TOKEN")
 GUILD_ID_RAW = os.environ.get("GUILD_ID")  # optional; if unset, update all guilds
 
-# XRP on CoinGecko is "ripple". You can override via env if needed.
 COIN_IDS: List[str] = [
     s.strip() for s in os.environ.get("COINGECKO_IDS", "ripple,xrp").split(",") if s.strip()
 ]
@@ -65,11 +64,8 @@ async def _fetch_one_id(session: aiohttp.ClientSession, coin_id: str) -> Tuple[f
 
 
 async def get_price_data(session: aiohttp.ClientSession) -> Tuple[float, float]:
-    """
-    Try each candidate CoinGecko id with retries.
-    Returns: (price_usd, change_24h_percent)
-    """
-    backoffs = [0, 1.5, 3.0, 5.0]  # per-id backoff
+    """Try each candidate CoinGecko id with retries."""
+    backoffs = [0, 1.5, 3.0, 5.0]
     last_err: Optional[Exception] = None
 
     for coin_id in COIN_IDS:
@@ -90,7 +86,6 @@ async def get_price_data(session: aiohttp.ClientSession) -> Tuple[float, float]:
 
 # ---------- Per-guild update ----------
 async def update_guild(guild: discord.Guild):
-    # Refresh member (don’t rely solely on cache)
     try:
         me = guild.me or await guild.fetch_member(client.user.id)
     except discord.HTTPException as e:
@@ -108,14 +103,13 @@ async def update_guild(guild: discord.Guild):
     except Exception as e:
         log.warning(f"[{guild.name}] Price fetch failed: {e}")
         try:
-            await client.change_presence(activity=discord.Game(name="XRP: API error"))
+            await client.change_presence(activity=discord.Game(name="API error"))
         except Exception:
             pass
         return
 
-    # XRP is often sub-$2; show 3 decimals
     emoji = "🟢" if change_24h >= 0 else "🔴"
-    nickname = f"XRP ${price:.3f} {emoji}"
+    nickname = f"${price:.3f} {emoji}"  # Only price, no 'XRP' label
     if len(nickname) > 32:
         nickname = nickname[:32]
 
@@ -140,7 +134,6 @@ async def updater_loop():
     log.info("Updater loop started.")
     while not client.is_closed():
         try:
-            # Resolve target guilds
             if GUILD_ID:
                 g = client.get_guild(GUILD_ID)
                 targets = [g] if g else []
@@ -182,7 +175,7 @@ async def on_resumed():
     log.info("Discord session resumed.")
 
 
-# Graceful shutdown for Railway restarts
+# ---------- Shutdown ----------
 async def _shutdown():
     global _http_session, update_task
     if update_task and not update_task.done():
